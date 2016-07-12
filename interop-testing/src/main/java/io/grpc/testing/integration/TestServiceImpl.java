@@ -358,7 +358,7 @@ public class TestServiceImpl implements TestServiceGrpc.TestService {
     boolean compressable = compressableResponse(request.getResponseType());
     for (ResponseParameters params : request.getResponseParametersList()) {
       chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize(), compressable));
-
+      // chunkQueue.add(new Chunk(1000, offset, params.getSize(), compressable));
       // Increment the offset past this chunk.
       // Both buffers need to be circular.
       offset = (offset + params.getSize())

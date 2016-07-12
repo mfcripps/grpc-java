@@ -617,8 +617,11 @@ class NettyClientHandler extends AbstractNettyHandler {
       if (data.readLong() == flowControlPing.payload()) {
         data.readerIndex(0);
         flowControlPing.incrementDataSincePing(data.readableBytes());
-        flowControlPing.updateWindow();
-        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
+        int window = flowControlPing.updateWindow();
+        if (logger.isLoggable(Level.FINER)) {
+          logger.log(Level.FINER,
+              String.format("OBDP: " + flowControlPing.getDataSincePing() + " Window: " + window));
+        }
       } else if (p != null) {
         data.readerIndex(0);
         long ackPayload = data.readLong();

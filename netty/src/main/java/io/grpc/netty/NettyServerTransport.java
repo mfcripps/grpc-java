@@ -31,6 +31,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Status;
@@ -40,6 +41,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
+import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.Http2LocalFlowController;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;

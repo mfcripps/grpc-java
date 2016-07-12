@@ -78,7 +78,7 @@ public final class Utils {
   private static final String UNIX_DOMAIN_SOCKET_PREFIX = "unix://";
 
   // The histogram can record values between 1 microsecond and 1 min.
-  public static final long HISTOGRAM_MAX_VALUE = 60000000L;
+  public static final long HISTOGRAM_MAX_VALUE = 6000000000L;
   // Value quantization will be no larger than 1/10^3 = 0.1%.
   public static final int HISTOGRAM_PRECISION = 3;
 

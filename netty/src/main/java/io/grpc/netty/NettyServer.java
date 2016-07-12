@@ -35,6 +35,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.SharedResourceHolder;
@@ -46,6 +48,8 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
+import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 

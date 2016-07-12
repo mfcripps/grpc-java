@@ -46,6 +46,9 @@ import io.netty.handler.codec.http2.Http2LocalFlowController;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Base class for all Netty gRPC handlers. This class standardizes exception handling (always
  * shutdown the connection) as well as sending the initial connection window at startup.
@@ -145,13 +148,14 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
       pingCount++;
     }
 
-    public void updateWindow() throws Http2Exception {
+    public int updateWindow() throws Http2Exception {
       pingReturn++;
       Http2LocalFlowController fc = decoder().flowController();
       // Calculate new window size by doubling the observed BDP, but cap at max window
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
       int currentWindow = fc.initialWindowSize(connection().connectionStream());
+      System.out.println(currentWindow);
       if (targetWindow > currentWindow) {
         int increase = targetWindow - currentWindow;
         fc.incrementWindowSize(connection().connectionStream(), increase);
@@ -159,7 +163,9 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
         Http2Settings settings = new Http2Settings();
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+        return targetWindow;
       }
+      return currentWindow;
     }
 
     public void incrementDataSincePing(int increase) {

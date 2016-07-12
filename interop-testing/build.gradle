@@ -77,11 +77,19 @@ task stresstest_client(type: CreateStartScripts) {
     defaultJvmOpts = ["-verbose:gc", "-XX:+PrintFlagsFinal"]
 }
 
+task flowcontrol_test(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.FlowControlTest"
+    applicationName = "flowcontrol-test"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime + configurations.tcnative
+    defaultJvmOpts = ["-verbose:gc", "-XX:+PrintFlagsFinal"]
+}
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
+    from(flowcontrol_test)
     fileMode = 0755
 }
 
