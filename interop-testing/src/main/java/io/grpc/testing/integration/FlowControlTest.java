@@ -55,6 +55,7 @@ public class FlowControlTest extends AbstractInteropTest {
   private ManagedChannel channel;
   private InetAddress addr;
   private int port = 5001;
+  private int proxyPort = 5000;
 
   // in kbits
   private final int LOW_BAND = 800;
@@ -97,12 +98,12 @@ public class FlowControlTest extends AbstractInteropTest {
     // highBandLowLatency();
     // highBandHighLatency();
     // verySmallWindow();
-    stopStaticServer();
+    // stopStaticServer();
   }
 
   private void lowBandLowLatency() {
     resetServer(REGULAR_WINDOW, REGULAR_WINDOW);
-    doStream(LOW_BAND, LOW_LAT, 16 * 1024, 1, 5);
+    doStream(LOW_BAND, LOW_LAT, 1 * 1024, 1, 1);
   }
 
   private void lowBandHighLatency() {
@@ -118,6 +119,8 @@ public class FlowControlTest extends AbstractInteropTest {
 
   private void highBandHighLatency() {
     resetServer(REGULAR_WINDOW, REGULAR_WINDOW);
+    private Server server;
+
     doStream(HIGH_BAND, HIGH_LAT, 128 * 1024, 1, 5);
   }
 
