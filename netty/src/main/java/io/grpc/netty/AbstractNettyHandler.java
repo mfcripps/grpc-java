@@ -54,6 +54,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
   private static long GRACEFUL_SHUTDOWN_TIMEOUT = SECONDS.toMillis(5);
   private int initialConnectionWindow;
   private ChannelHandlerContext ctx;
+  private boolean flowControlOn = false;
 
   AbstractNettyHandler(Http2ConnectionDecoder decoder,
                        Http2ConnectionEncoder encoder,
@@ -147,18 +148,21 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
 
     public void updateWindow() throws Http2Exception {
       pingReturn++;
-      Http2LocalFlowController fc = decoder().flowController();
-      // Calculate new window size by doubling the observed BDP, but cap at max window
-      int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
-      setPinging(false);
-      int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      if (targetWindow > currentWindow) {
-        int increase = targetWindow - currentWindow;
-        fc.incrementWindowSize(connection().connectionStream(), increase);
-        fc.initialWindowSize(targetWindow);
-        Http2Settings settings = new Http2Settings();
-        settings.initialWindowSize(targetWindow);
-        frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+      // only perform window updates if flowControlOn. Otherwise, pings are essentially ignored
+      if (flowControlOn) {
+        Http2LocalFlowController fc = decoder().flowController();
+        // Calculate new window size by doubling the observed BDP, but cap at max window
+        int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
+        setPinging(false);
+        int currentWindow = fc.initialWindowSize(connection().connectionStream());
+        if (targetWindow > currentWindow) {
+          int increase = targetWindow - currentWindow;
+          fc.incrementWindowSize(connection().connectionStream(), increase);
+          fc.initialWindowSize(targetWindow);
+          Http2Settings settings = new Http2Settings();
+          settings.initialWindowSize(targetWindow);
+          frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+        }
       }
     }
 
