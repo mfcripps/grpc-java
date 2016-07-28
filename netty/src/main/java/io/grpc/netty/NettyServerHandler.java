@@ -99,7 +99,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
-  private FlowControlPinger flowControlPing = new FlowControlPinger();
+  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
                                        int maxStreams,
@@ -220,11 +220,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream)
       throws Http2Exception {
-    if (!flowControlPing.isPinging()) {
-      flowControlPing.setPinging(true);
-      flowControlPing.sendPing(ctx());
-    }
-    flowControlPing.incrementDataSincePing(data.readableBytes() + padding);
+    flowControlPing.onDataRead(data.readableBytes(), padding);
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
       stream.inboundDataReceived(data, endOfStream);
@@ -481,11 +477,9 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
-      if (data.readLong() == flowControlPing.payload()) {
-        data.readerIndex(0);
-        flowControlPing.incrementDataSincePing(data.readableBytes());
+      if (data.getLong(data.readerIndex()) == flowControlPing.payload()) {
         flowControlPing.updateWindow();
-        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
+        logger.log(Level.FINE, "OBDP: {0}", flowControlPing.getDataSincePing());
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }

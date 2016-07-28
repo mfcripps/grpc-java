@@ -110,7 +110,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Random random = new Random();
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private FlowControlPinger flowControlPing = new FlowControlPinger();
+  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -245,11 +245,7 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
-    if (!flowControlPing.isPinging()) {
-      flowControlPing.setPinging(true);
-      flowControlPing.sendPing(ctx());
-    }
-    flowControlPing.incrementDataSincePing(data.readableBytes() + padding);
+    flowControlPing.onDataRead(data.readableBytes(), padding);
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
   }
@@ -614,11 +610,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
       Http2Ping p = ping;
-      if (data.readLong() == flowControlPing.payload()) {
-        data.readerIndex(0);
-        flowControlPing.incrementDataSincePing(data.readableBytes());
+      if (data.getLong(data.readerIndex()) == flowControlPing.payload()) {
         flowControlPing.updateWindow();
-        logger.log(Level.FINE, String.format("OBDP: {0}", flowControlPing.getDataSincePing()));
+        logger.log(Level.FINE, "OBDP: {0}", flowControlPing.getDataSincePing());
       } else if (p != null) {
         data.readerIndex(0);
         long ackPayload = data.readLong();
@@ -626,8 +620,8 @@ class NettyClientHandler extends AbstractNettyHandler {
           p.complete();
           ping = null;
         } else {
-        logger.log(Level.WARNING, String.format("Received unexpected ping ack. "
-            + "Expecting %d, got %d", p.payload(), ackPayload));
+          logger.log(Level.WARNING, String.format(
+              "Received unexpected ping ack. " + "Expecting %d, got %d", p.payload(), ackPayload));
         }
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
