@@ -297,6 +297,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void dataPingSentOnHeaderRecieved() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
 
     channelRead(dataFrame(3, false));
 
@@ -306,6 +307,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void dataPingAckIsRecognized() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
 
     channelRead(dataFrame(3, false));
     long pingdata = handler().flowControlPinger().payload();
@@ -320,6 +322,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void dataSizeSincePingAccumulates() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
     long frameData = 123456;
     ByteBuf buff = ctx().alloc().buffer(16);
     buff.writeLong(frameData);
@@ -337,6 +340,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
     createStream();
+    handler().setAutoTuneFlowControl(true);
 
     ByteBuf data = ctx().alloc().buffer(1024);
     while (data.isWritable()) {
@@ -354,7 +358,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    accumulator += buffer.readableBytes();
 
     assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
     assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
@@ -363,6 +366,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void windowShouldNotDecrease() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
     int initWindow = 1048576;
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
@@ -385,7 +389,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
-    accumulator += buffer.readableBytes();
 
     assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
     assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
@@ -394,6 +397,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void windowShouldNotExceedMaxWindowSize() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
     Http2Stream connectionStream = connection().connectionStream();
     Http2LocalFlowController localFlowController = connection().local().flowController();
     int maxWindow = handler().flowControlPinger().maxWindow();
@@ -410,6 +414,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void consecutiveUpdates() throws Exception {
     createStream();
+    handler().setAutoTuneFlowControl(true);
 
     channelRead(dataFrame(3, false));
     handler().flowControlPinger().setDataSizeSincePing(40000);
@@ -419,14 +424,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     int pingDataLength = buffer.readableBytes();
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(80000 + 2 * pingDataLength,
+    assertEquals(80000,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
 
     channelRead(dataFrame(3, false));
     handler().flowControlPinger().setDataSizeSincePing(70000);
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(140000 + 2 * pingDataLength,
+    assertEquals(140000,
         connection().local().flowController().initialWindowSize(connection().connectionStream()));
   }
 

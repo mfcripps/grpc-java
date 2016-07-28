@@ -33,6 +33,7 @@ package io.grpc.netty;
 
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static io.netty.buffer.Unpooled.unreleasableBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -52,9 +53,9 @@ import io.netty.handler.codec.http2.Http2Stream;
  */
 abstract class AbstractNettyHandler extends Http2ConnectionHandler {
   private static long GRACEFUL_SHUTDOWN_TIMEOUT = SECONDS.toMillis(5);
+  private static boolean autoTuneFlowControlOn = false;
   private int initialConnectionWindow;
   private ChannelHandlerContext ctx;
-  private boolean flowControlOn = false;
 
   AbstractNettyHandler(Http2ConnectionDecoder decoder,
                        Http2ConnectionEncoder encoder,
@@ -114,62 +115,21 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
     }
   }
 
+  @VisibleForTesting
+  void setAutoTuneFlowControl(boolean isOn) {
+    autoTuneFlowControlOn = isOn;
+  }
   /**
    * Class for handling flow control pinging and flow control window updates as necessary
    */
-  protected class FlowControlPinger {
-
+  final class FlowControlPinger {
     private static final int BDP_MEASUREMENT_PING = 1234;
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
-
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
     private int dataSizeSincePing;
     private ByteBuf payloadBuff;
-
-    public boolean isPinging() {
-      return pinging;
-    }
-
-    public void setPinging(boolean pingOut) {
-      pinging = pingOut;
-    }
-
-    public void sendPing(ChannelHandlerContext ctx) {
-      setDataSizeSincePing(0);
-      if (payloadBuff == null) {
-        initializePayloadBuf();
-      }
-      payloadBuff.retain();
-      encoder().writePing(ctx, false, payloadBuff, ctx.newPromise());
-      pingCount++;
-    }
-
-    public void updateWindow() throws Http2Exception {
-      pingReturn++;
-      // only perform window updates if flowControlOn. Otherwise, pings are essentially ignored
-      if (flowControlOn) {
-        Http2LocalFlowController fc = decoder().flowController();
-        // Calculate new window size by doubling the observed BDP, but cap at max window
-        int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
-        setPinging(false);
-        int currentWindow = fc.initialWindowSize(connection().connectionStream());
-        if (targetWindow > currentWindow) {
-          int increase = targetWindow - currentWindow;
-          fc.incrementWindowSize(connection().connectionStream(), increase);
-          fc.initialWindowSize(targetWindow);
-          Http2Settings settings = new Http2Settings();
-          settings.initialWindowSize(targetWindow);
-          frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
-        }
-      }
-    }
-
-    public void incrementDataSincePing(int increase) {
-      int currentSize = getDataSincePing();
-      setDataSizeSincePing(currentSize + increase);
-    }
 
     public int payload() {
       return BDP_MEASUREMENT_PING;
@@ -177,6 +137,67 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
 
     public int maxWindow() {
       return MAX_WINDOW_SIZE;
+    }
+
+    public void onDataRead(int dataLength, int paddingLength) {
+      if (!autoTuneFlowControlOn) {
+        return;
+      }
+      if (!isPinging()) {
+        setPinging(true);
+        sendPing(ctx());
+      }
+      incrementDataSincePing(dataLength + paddingLength);
+    }
+
+    public void updateWindow() throws Http2Exception {
+      if (!autoTuneFlowControlOn) {
+        return;
+      }
+      pingReturn++;
+      Http2LocalFlowController fc = decoder().flowController();
+      // Calculate new window size by doubling the observed BDP, but cap at max window
+      int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
+      setPinging(false);
+      int currentWindow = fc.initialWindowSize(connection().connectionStream());
+      if (targetWindow > currentWindow) {
+        int increase = targetWindow - currentWindow;
+        fc.incrementWindowSize(connection().connectionStream(), increase);
+        fc.initialWindowSize(targetWindow);
+        Http2Settings settings = new Http2Settings();
+        settings.initialWindowSize(targetWindow);
+        frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
+      }
+
+    }
+
+    private boolean isPinging() {
+      return pinging;
+    }
+
+    private void setPinging(boolean pingOut) {
+      pinging = pingOut;
+    }
+
+    private void sendPing(ChannelHandlerContext ctx) {
+      setDataSizeSincePing(0);
+      if (payloadBuff == null) {
+        initializePayloadBuf();
+      }
+      payloadBuff.retain();
+      encoder().writePing(ctx, false, payloadBuff.slice(), ctx.newPromise());
+      pingCount++;
+    }
+
+    private void incrementDataSincePing(int increase) {
+      int currentSize = getDataSincePing();
+      setDataSizeSincePing(currentSize + increase);
+    }
+
+    private void initializePayloadBuf() {
+      payloadBuff =
+          unreleasableBuffer(ctx().alloc().directBuffer(8).writeLong(BDP_MEASUREMENT_PING))
+              .asReadOnly();
     }
 
     @VisibleForTesting
@@ -197,11 +218,6 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
     @VisibleForTesting
     void setDataSizeSincePing(int dataSize) {
       dataSizeSincePing = dataSize;
-    }
-
-    private void initializePayloadBuf() {
-      payloadBuff = ctx().alloc().directBuffer(8);
-      payloadBuff.writeLong(BDP_MEASUREMENT_PING);
     }
   }
 }
