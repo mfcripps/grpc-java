@@ -31,9 +31,9 @@
 
 package io.grpc.netty;
 
+import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static io.netty.buffer.Unpooled.unreleasableBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -119,10 +119,12 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
   void setAutoTuneFlowControl(boolean isOn) {
     autoTuneFlowControlOn = isOn;
   }
+
   /**
-   * Class for handling flow control pinging and flow control window updates as necessary
+   * Class for handling flow control pinging and flow control window updates as necessary.
    */
   final class FlowControlPinger {
+
     private static final int BDP_MEASUREMENT_PING = 1234;
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
     private int pingCount;
