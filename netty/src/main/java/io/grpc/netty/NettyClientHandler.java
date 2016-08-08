@@ -103,6 +103,7 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   private static final Status EXHAUSTED_STREAMS_STATUS =
           Status.UNAVAILABLE.withDescription("Stream IDs have been exhausted");
+  private static final long USER_PING_PAYLOAD = 1111;
 
   private final Http2Connection.PropertyKey streamKey;
   private final ClientTransportLifecycleManager lifecycleManager;
@@ -449,7 +450,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     promise.setSuccess();
     promise = ctx().newPromise();
     // set outstanding operation
-    long data = random.nextLong();
+    long data = USER_PING_PAYLOAD;
     ByteBuf buffer = ctx.alloc().buffer(8);
     buffer.writeLong(data);
     Stopwatch stopwatch = Stopwatch.createStarted(ticker);
@@ -612,9 +613,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2Ping p = ping;
       if (data.getLong(data.readerIndex()) == flowControlPing.payload()) {
         flowControlPing.updateWindow();
-        logger.log(Level.FINE, "OBDP: {0}", flowControlPing.getDataSincePing());
+        logger.log(Level.FINE, "Window: {0}",
+            decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (p != null) {
-        data.readerIndex(0);
         long ackPayload = data.readLong();
         if (p.payload() == ackPayload) {
           p.complete();
