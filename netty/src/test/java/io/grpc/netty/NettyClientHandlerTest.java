@@ -457,146 +457,6 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void dataPingSentOnDataRecieved() throws Exception {
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-
-    channelRead(dataFrame(3, false));
-
-    assertEquals(1, handler().flowControlPinger().getPingCount());
-  }
-
-  @Test
-  public void dataPingAckIsRecognized() throws Exception {
-    createStream();
-    // handler().flowControlPinger().setTesting();
-
-    channelRead(dataFrame(3, false));
-    long pingdata = handler().flowControlPinger().payload();
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(pingdata);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(1, handler().flowControlPinger().getPingCount());
-    assertEquals(1, handler().flowControlPinger().getPingReturn());
-  }
-
-  @Test
-  public void dataSizeSincePingAccumulates() throws Exception {
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-    long frameData = 123456;
-    ByteBuf buff = ctx().alloc().buffer(16);
-    buff.writeLong(frameData);
-    int length = buff.readableBytes();
-
-    channelRead(dataFrame(3, false, buff.copy()));
-    channelRead(dataFrame(3, false, buff.copy()));
-    channelRead(dataFrame(3, false, buff.copy()));
-
-    assertEquals(length * 3, handler().flowControlPinger().getDataSincePing());
-  }
-
-  @Test
-  public void windowUpdateMatchesTarget() throws Exception {
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-
-    ByteBuf data = ctx().alloc().buffer(1 * 1024);
-    while (data.isWritable()) {
-      data.writeLong(1111);
-    }
-    int length = data.readableBytes();
-    ByteBuf frame = dataFrame(3, false, data.copy());
-    channelRead(frame);
-    int accumulator = length;
-    for (int i = 0; i < 40; i++) {
-      channelRead(dataFrame(3, false, data.copy()));
-      accumulator += length;
-    }
-    long pingdata = handler().flowControlPinger().payload();
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(pingdata);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
-    assertEquals(2 * accumulator, localFlowController.initialWindowSize(connectionStream));
-  }
-
-  @Test
-  public void windowShouldNotDecrease() throws Exception {
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-    int initWindow = 1048576;
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-    localFlowController.incrementWindowSize(connectionStream, (initWindow - flowControlWindow));
-    localFlowController.initialWindowSize(initWindow);
-
-    ByteBuf data = ctx().alloc().buffer(16 * 1024);
-    while (data.isWritable()) {
-      data.writeLong(1111);
-    }
-    int length = data.readableBytes();
-    ByteBuf frame = dataFrame(3, false, data.copy());
-    channelRead(frame);
-    int accumulator = length;
-    for (int i = 0; i < 10; i++) {
-      channelRead(dataFrame(3, false, data.copy()));
-      accumulator += length;
-    }
-    long pingdata = handler().flowControlPinger().payload();
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(pingdata);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(accumulator, handler().flowControlPinger().getDataSincePing());
-    assertEquals(initWindow, localFlowController.initialWindowSize(connectionStream));
-  }
-
-  @Test
-  public void windowShouldNotExceedMaxWindowSize() throws Exception {
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-    Http2Stream connectionStream = connection().connectionStream();
-    Http2LocalFlowController localFlowController = connection().local().flowController();
-    int maxWindow = handler().flowControlPinger().maxWindow();
-
-    handler().flowControlPinger().setDataSizeSincePing(maxWindow);
-    int payload = handler().flowControlPinger().payload();
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(payload);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(maxWindow, localFlowController.initialWindowSize(connectionStream));
-  }
-
-  @Test
-  public void consecutiveUpdates() throws Exception {
-    createStream();
-    handler().setAutoTuneFlowControl(true);
-
-    channelRead(dataFrame(3, false));
-    handler().flowControlPinger().setDataSizeSincePing(40000);
-    long pingdata = handler().flowControlPinger().payload();
-    ByteBuf buffer = handler().ctx().alloc().buffer(8);
-    buffer.writeLong(pingdata);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(80000,
-        connection().local().flowController().initialWindowSize(connection().connectionStream()));
-
-    channelRead(dataFrame(3, false));
-    handler().flowControlPinger().setDataSizeSincePing(70000);
-    channelRead(pingFrame(true, buffer));
-
-    assertEquals(140000,
-        connection().local().flowController().initialWindowSize(connection().connectionStream()));
-  }
-
-  @Test
   public void oustandingUserPingShouldNotInteractWithDataPing() throws Exception {
     createStream();
     handler().setAutoTuneFlowControl(true);
@@ -607,17 +467,17 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     verifyWrite().writePing(eq(ctx()), eq(false), captor.capture(), any(ChannelPromise.class));
     ByteBuf payload = captor.getValue();
     channelRead(dataFrame(3, false));
-    long pingdata = handler().flowControlPinger().payload();
+    long pingdata = handler().flowControlPing().payload();
     ByteBuf buffer = handler().ctx().alloc().buffer(8);
     buffer.writeLong(pingdata);
     channelRead(pingFrame(true, buffer));
 
-    assertEquals(1, handler().flowControlPinger().getPingReturn());
+    assertEquals(1, handler().flowControlPing().getPingReturn());
     assertEquals(0, callback.invocationCount);
 
     channelRead(pingFrame(true, payload));
 
-    assertEquals(1, handler().flowControlPinger().getPingReturn());
+    assertEquals(1, handler().flowControlPing().getPingReturn());
     assertEquals(1, callback.invocationCount);
   }
 
@@ -630,6 +490,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Once https://github.com/netty/netty/issues/4316 is resolved, we should also verify that
     // any open streams are closed properly.
     assertFalse(channel().isOpen());
+  }
+
+  @Override
+  protected void makeStream() throws Exception {
+    createStream();
   }
 
   private ChannelFuture sendPing(PingCallback callback) {

@@ -38,6 +38,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import io.grpc.netty.AbstractNettyHandler.FlowControlPinger;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -56,9 +57,10 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends Http2ConnectionHandler {
   private static long GRACEFUL_SHUTDOWN_TIMEOUT = SECONDS.toMillis(5);
-  private static boolean autoTuneFlowControlOn = true;
+  private boolean autoTuneFlowControlOn = false;
   private int initialConnectionWindow;
   private ChannelHandlerContext ctx;
+  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
   private static final int BDP_MEASUREMENT_PING = 1234;
   private static final ByteBuf payloadBuf =
@@ -123,6 +125,11 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
   }
 
   @VisibleForTesting
+  FlowControlPinger flowControlPing() {
+    return flowControlPing;
+  }
+
+  @VisibleForTesting
   void setAutoTuneFlowControl(boolean isOn) {
     autoTuneFlowControlOn = isOn;
   }
@@ -137,7 +144,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
     private int pingReturn;
     private boolean pinging;
     private int dataSizeSincePing;
-    private float lastBandwidth;
+    private float lastBandwidth; // bytes per second
     private long lastPingTime;
 
     public int payload() {
@@ -165,7 +172,10 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
       }
       pingReturn++;
       long elapsedTime = (System.nanoTime() - lastPingTime);
-      float bandwidth = 0;
+      if (elapsedTime == 0) {
+        elapsedTime = 1;
+      }
+      long bandwidth = 0;
       if (elapsedTime > 0) {
         bandwidth = (getDataSincePing() * TimeUnit.SECONDS.toNanos(1)) / elapsedTime;
       }

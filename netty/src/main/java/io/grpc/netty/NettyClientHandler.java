@@ -111,7 +111,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Random random = new Random();
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyClientHandler newHandler(ClientTransportLifecycleManager lifecycleManager,
                                        int flowControlWindow, int maxHeaderListSize,
@@ -148,8 +147,11 @@ class NettyClientHandler extends AbstractNettyHandler {
         new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
+    // connection.local().flowController(
+    // new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
+
     connection.local().flowController(
-        new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
+        new DefaultHttp2LocalFlowController(connection, (float) .5, true));
 
 
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
@@ -212,10 +214,10 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  @VisibleForTesting
-  FlowControlPinger flowControlPinger() {
-    return flowControlPing;
-  }
+  // @VisibleForTesting
+  // FlowControlPinger flowControlPinger() {
+  // return flowControlPing;
+  // }
 
   void startWriteQueue(Channel channel) {
     clientWriteQueue = new WriteQueue(channel);
@@ -246,7 +248,7 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream) {
-    flowControlPing.onDataRead(data.readableBytes(), padding);
+    flowControlPing().onDataRead(data.readableBytes(), padding);
     NettyClientStream stream = clientStream(requireHttp2Stream(streamId));
     stream.transportDataReceived(data, endOfStream);
   }
@@ -611,8 +613,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
       Http2Ping p = ping;
-      if (data.getLong(data.readerIndex()) == flowControlPing.payload()) {
-        flowControlPing.updateWindow();
+      if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
+        flowControlPing().updateWindow();
         logger.log(Level.FINE, "Window: {0}",
             decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else if (p != null) {
