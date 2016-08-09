@@ -147,12 +147,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
-    // connection.local().flowController(
-    // new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
-
     connection.local().flowController(
-        new DefaultHttp2LocalFlowController(connection, (float) .5, true));
-
+        new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
 
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
