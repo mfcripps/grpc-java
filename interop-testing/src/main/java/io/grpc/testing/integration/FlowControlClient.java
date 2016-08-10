@@ -40,11 +40,12 @@ public class FlowControlClient {
       HandlerSettings.autoWindowOn(false);
     }
     FlowControlClient client = new FlowControlClient();
+    client.setUp();
     client.createChannel(ip, port);
     client.doStream();
   }
 
-  static void setUp() {
+  void setUp() {
     logger = Logger.getLogger("io.grpc.netty.NettyClientHandler");
     logger.setLevel(Level.FINEST);
     logHandler = new TestLogHandler();
@@ -52,7 +53,7 @@ public class FlowControlClient {
   }
 
   void doStream() {
-    int streamSize = 10 * 1024 * 1024;
+    int streamSize = 50 * 1024 * 1024;
 
     TestServiceGrpc.TestService stub = TestServiceGrpc.newStub(channel);
     StreamingOutputCallRequest.Builder builder = StreamingOutputCallRequest.newBuilder();
