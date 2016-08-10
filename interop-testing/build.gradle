@@ -77,11 +77,38 @@ task stresstest_client(type: CreateStartScripts) {
     defaultJvmOpts = ["-verbose:gc", "-XX:+PrintFlagsFinal"]
 }
 
+task flowcontrol_test (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.NettyFlowControlTest"
+    applicationName = "flowcontrol_test"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime + configurations.tcnative
+    defaultJvmOpts = []
+}
+
+task flowcontrol_client (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.FlowControlClient"
+    applicationName = "flowcontrol_client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime + configurations.tcnative
+    defaultJvmOpts = []
+}
+
+task flowcontrol_server (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.FlowControlServer"
+    applicationName = "flowcontrol_server"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime + configurations.tcnative
+    defaultJvmOpts = []
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
+    from(flowcontrol_test)
+    from(flowcontrol_server)
+    from(flowcontrol_client)
     fileMode = 0755
 }
 

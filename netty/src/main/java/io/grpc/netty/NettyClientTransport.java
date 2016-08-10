@@ -130,6 +130,8 @@ class NettyClientTransport implements ManagedClientTransport {
         Preconditions.checkNotNull(transportListener, "listener"));
 
     handler = newHandler();
+    HandlerSettings.setAutoWindow(handler);
+
     negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();

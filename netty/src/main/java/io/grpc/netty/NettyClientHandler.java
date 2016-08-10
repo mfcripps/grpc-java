@@ -210,11 +210,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-  // @VisibleForTesting
-  // FlowControlPinger flowControlPinger() {
-  // return flowControlPing;
-  // }
-
   void startWriteQueue(Channel channel) {
     clientWriteQueue = new WriteQueue(channel);
   }
