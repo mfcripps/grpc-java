@@ -99,7 +99,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private Throwable connectionError;
   private boolean teWarningLogged;
   private WriteQueue serverWriteQueue;
-  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
   static NettyServerHandler newHandler(ServerTransportListener transportListener,
                                        int maxStreams,
@@ -172,11 +171,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     super.handlerAdded(ctx);
   }
 
-  @VisibleForTesting
-  FlowControlPinger flowControlPinger() {
-    return flowControlPing;
-  }
-
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     if (!teWarningLogged && !TE_TRAILERS.equals(headers.get(TE_HEADER))) {
@@ -220,7 +214,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onDataRead(int streamId, ByteBuf data, int padding, boolean endOfStream)
       throws Http2Exception {
-    flowControlPing.onDataRead(data.readableBytes(), padding);
+    flowControlPing().onDataRead(data.readableBytes(), padding);
     try {
       NettyServerStream.TransportState stream = serverStream(requireHttp2Stream(streamId));
       stream.inboundDataReceived(data, endOfStream);
@@ -477,8 +471,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     @Override
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
-      if (data.getLong(data.readerIndex()) == flowControlPing.payload()) {
-        flowControlPing.updateWindow();
+      if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
+        flowControlPing().updateWindow();
         logger.log(Level.FINE, "Window: {0}",
             decoder().flowController().initialWindowSize(connection().connectionStream()));
       } else {

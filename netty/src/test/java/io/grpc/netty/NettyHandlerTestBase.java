@@ -235,7 +235,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     AbstractNettyHandler handler = (AbstractNettyHandler) handler();
     handler.setAutoTuneFlowControl(true);
 
-    channelRead(dataFrame(3, false, ctx().alloc().buffer(1024)));
+    channelRead(dataFrame(3, false, content()));
 
     assertEquals(1, handler.flowControlPing().getPingCount());
   }
@@ -246,7 +246,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     AbstractNettyHandler handler = (AbstractNettyHandler) handler();
     handler.setAutoTuneFlowControl(true);
 
-    channelRead(dataFrame(3, false, ctx().alloc().buffer(1024)));
+    channelRead(dataFrame(3, false, content()));
     long pingdata = handler.flowControlPing().payload();
     ByteBuf payload = handler.ctx().alloc().buffer(8);
     payload.writeLong(pingdata);
@@ -255,6 +255,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     assertEquals(1, handler.flowControlPing().getPingCount());
     assertEquals(1, handler.flowControlPing().getPingReturn());
   }
+
 
   @Test
   public void dataSizeSincePingAccumulates() throws Exception {
