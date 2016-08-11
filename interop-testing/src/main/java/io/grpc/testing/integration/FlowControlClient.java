@@ -7,6 +7,8 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -53,24 +55,24 @@ public class FlowControlClient {
   }
 
   void doStream() {
-    int streamSize = 50 * 1024 * 1024;
+    int streamSize = 1024 * 1024;
 
     TestServiceGrpc.TestService stub = TestServiceGrpc.newStub(channel);
     StreamingOutputCallRequest.Builder builder = StreamingOutputCallRequest.newBuilder();
     builder.addResponseParameters(ResponseParameters.newBuilder().setSize(streamSize));
     StreamingOutputCallRequest request = builder.build();
 
-    TestStreamObserver observer = new TestStreamObserver();
-    stub.streamingOutputCall(request, observer);
-    try {
-      observer.waitFor();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
+    List<Long> times = new ArrayList<Long>();
+    for (int i = 0; i < 100; i++) {
+      TestStreamObserver observer = new TestStreamObserver();
+      stub.streamingOutputCall(request, observer);
+      try {
+        observer.waitFor();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+      times.add(observer.getElapsedTime());
     }
-    System.out.println(observer.getElapsedTime());
-    // Don't actually need bwithUsed right now but keeping it around because it might be interesting
-    double bwithUsed =
-        ((double) streamSize / (double) (observer.getElapsedTime()) * TimeUnit.SECONDS.toNanos(1));
     int lastWindow = 64 * 1024;
     try {
       lastWindow = logHandler.getLastWindow();
@@ -78,8 +80,9 @@ public class FlowControlClient {
       // System.out.println("log handler error");
     }
 
-    System.out.println("Elapsed Time: " + observer.getElapsedTime());
-    System.out.println("Effective Bandwidth: " + bwithUsed);
+    for (int i = 0; i < times.size(); i++) {
+      System.out.println(times.get(i));
+    }
     System.out.println("Window: " + lastWindow);
   }
 
