@@ -473,8 +473,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     public void onPingAckRead(ChannelHandlerContext ctx, ByteBuf data) throws Http2Exception {
       if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        logger.log(Level.FINE, "Window: {0}",
-            decoder().flowController().initialWindowSize(connection().connectionStream()));
+        if (logger.isLoggable(Level.FINE)) {
+          logger.log(Level.FINE, String.format("Window: %d",
+              decoder().flowController().initialWindowSize(connection().connectionStream())));
+        }
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");
       }

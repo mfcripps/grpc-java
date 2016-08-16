@@ -210,6 +210,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
+  // @VisibleForTesting
+  // FlowControlPinger flowControlPinger() {
+  // return flowControlPing;
+  // }
+
   void startWriteQueue(Channel channel) {
     clientWriteQueue = new WriteQueue(channel);
   }
@@ -606,8 +611,10 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2Ping p = ping;
       if (data.getLong(data.readerIndex()) == flowControlPing().payload()) {
         flowControlPing().updateWindow();
-        logger.log(Level.FINE, "Window: {0}",
-            decoder().flowController().initialWindowSize(connection().connectionStream()));
+        if (logger.isLoggable(Level.FINE)) {
+          logger.log(Level.FINE, String.format("Window: %d",
+              decoder().flowController().initialWindowSize(connection().connectionStream())));
+        }
       } else if (p != null) {
         long ackPayload = data.readLong();
         if (p.payload() == ackPayload) {
@@ -615,7 +622,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           ping = null;
         } else {
           logger.log(Level.WARNING, String.format(
-              "Received unexpected ping ack. " + "Expecting %d, got %d", p.payload(), ackPayload));
+              "Received unexpected ping ack. Expecting %d, got %d", p.payload(), ackPayload));
         }
       } else {
         logger.warning("Received unexpected ping ack. No ping outstanding");

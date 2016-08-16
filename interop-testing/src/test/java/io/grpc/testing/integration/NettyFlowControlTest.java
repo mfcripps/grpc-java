@@ -63,6 +63,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -97,117 +98,90 @@ public class NettyFlowControlTest {
   private static final int BIG_WINDOW = 1024 * 1024;
   private static final int MAX_WINDOW = 8 * 1024 * 1024;
 
-  private static Logger logger;
-  private static TestLogHandler logHandler;
+  private static Logger logger = Logger.getLogger("io.grpc.netty.NettyClientHandler");
+  private static Handler logHandler;
   private static ManagedChannel channel;
-  private static InetAddress addr;
   private static Server server;
-  private static String loopback = "127.0.0.1";
+  private static String localhost = "127.0.0.1";
+  private static TrafficControlProxy proxy;
 
   // TODO: make ports/proxy arguments
   private final int port = 5001;
   private final int proxyPort = 5050;
   private final boolean useProxy = true;
-  private int testsPassed;
-  private int testsFailed;
 
   private static final ThreadPoolExecutor executor =
       new ThreadPoolExecutor(1, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-  private static final TrafficControlProxy proxy =
-      new TrafficControlProxy(LOW_BAND, LOW_LAT, TimeUnit.MILLISECONDS);
-
-  // HandlerAccessor accessor = new HandlerAccessor();
-
-  /*
-   * Keeping this main class around for now because it's convenient to be able to run this from the
-   * command line.
-   */
-  public static void main(String[] args) throws UnknownHostException {
-    NettyFlowControlTest ft = new NettyFlowControlTest();
-    setUp();
-    ft.lowBandLowLatency();
-    ft.lowBandHighLatency();
-    ft.highBandLowLatency();
-    ft.highBandHighLatency();
-    ft.verySmallWindow();
-    shutDownTests();
-    ft.printResults();
-  }
-
-  public void printResults() {
-    System.out.println("Passed: " + testsPassed + " Failed: " + testsFailed);
-  }
+  private static final List<Integer> windows = new ArrayList<Integer>();
 
   @BeforeClass
-  public static void setUp() throws UnknownHostException {
+  public static void setUp() {
     HandlerSettings.autoWindowOn(true);
-    addr = InetAddress.getByName(loopback);
-    logger = Logger.getLogger("io.grpc.netty.NettyClientHandler");
     logger.setLevel(Level.FINEST);
-    logHandler = new TestLogHandler();
+    logHandler = new Handler() {
+
+      @Override
+      public void publish(LogRecord record) {
+        String message = record.getMessage();
+        System.out.println(message);
+        if (message.contains("Window")) {
+          windows.add(Integer.parseInt(message.split(": ")[1]));
+        }
+      }
+
+      @Override
+      public void flush() {}
+
+      @Override
+      public void close() throws SecurityException {}
+    };
     logger.addHandler(logHandler);
-    startProxy();
   }
 
   @AfterClass
   public static void shutDownTests() {
-    try {
-      proxy.shutDown();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
     executor.shutdown();
-    server.shutdown();
   }
 
+  @After
+  public void endTest() throws IOException {
+    proxy.shutDown();
+    server.shutdown();
+  }
 
   @Test
-  public void doTests() {
-    lowBandLowLatency();
-    lowBandHighLatency();
-    highBandLowLatency();
-    highBandHighLatency();
-    verySmallWindow();
-    assertEquals(0, testsFailed);
-  }
-
-  public void endTest() {
-    server.shutdown();
-  }
-
-  // It is necessary to restart the server every time in order to bring the window back down.
-  private void lowBandLowLatency() {
+  public void lowBandLowLatency() throws InterruptedException, ExecutionException {
+    resetProxy(LOW_BAND, LOW_LAT, TimeUnit.MILLISECONDS).get();
     resetConnection(REGULAR_WINDOW, REGULAR_WINDOW);
     doTest(LOW_BAND, LOW_LAT);
-    endTest();
   }
 
-  private void lowBandHighLatency() {
-    resetProxy(LOW_BAND, HIGH_LAT, TimeUnit.MILLISECONDS);
+  @Test
+  public void lowBandHighLatency() throws InterruptedException, ExecutionException {
+    resetProxy(LOW_BAND, HIGH_LAT, TimeUnit.MILLISECONDS).get();
     resetConnection(REGULAR_WINDOW, REGULAR_WINDOW);
     doTest(LOW_BAND, HIGH_LAT);
-    endTest();
   }
 
-  private void highBandLowLatency() {
-    resetProxy(HIGH_BAND, LOW_LAT, TimeUnit.MILLISECONDS);
+  @Test
+  public void highBandLowLatency() throws InterruptedException, ExecutionException {
+    resetProxy(HIGH_BAND, LOW_LAT, TimeUnit.MILLISECONDS).get();
     resetConnection(REGULAR_WINDOW, REGULAR_WINDOW);
     doTest(HIGH_BAND, LOW_LAT);
-    endTest();
   }
 
-  private void highBandHighLatency() {
-    resetProxy(HIGH_BAND, HIGH_LAT, TimeUnit.MILLISECONDS);
-    resetConnection(REGULAR_WINDOW, REGULAR_WINDOW);
+  @Test
+  public void highBandHighLatency() throws InterruptedException, ExecutionException {
+    resetProxy(HIGH_BAND, HIGH_LAT, TimeUnit.MILLISECONDS).get();
+    resetConnection(BIG_WINDOW, BIG_WINDOW);
     doTest(HIGH_BAND, HIGH_LAT);
-    endTest();
   }
 
-  private void verySmallWindow() {
-    resetProxy(MED_BAND, MED_LAT, TimeUnit.MILLISECONDS);
+  @Test
+  public void verySmallWindow() throws InterruptedException, ExecutionException {
+    resetProxy(MED_BAND, MED_LAT, TimeUnit.MILLISECONDS).get();
     resetConnection(REGULAR_WINDOW, TINY_WINDOW);
     doTest(MED_BAND, MED_LAT);
-    endTest();
   }
 
   /**
@@ -217,9 +191,8 @@ public class NettyFlowControlTest {
    * @param bandwidth
    * @param latency
    */
-  private void doTest(int bandwidth, int latency) {
-    // arbitrary. smallest stream size I tried that still left enough time to fully inflate the
-    // window
+  private void doTest(int bandwidth, int latency) throws InterruptedException {
+
     int streamSize = 4 * 1024 * 1024;
 
     TestServiceGrpc.TestService stub = TestServiceGrpc.newStub(channel);
@@ -229,29 +202,20 @@ public class NettyFlowControlTest {
 
     TestStreamObserver observer = new TestStreamObserver();
     stub.streamingOutputCall(request, observer);
-    try {
-      observer.waitFor();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    observer.waitFor();
 
-    // Don't actually need bwithUsed right now but keeping it around because it might be interesting
-    long bwithUsed = (streamSize / (observer.getElapsedTime() / TimeUnit.SECONDS.toNanos(1)));
+    // Don't actually need bw right now but keeping it around because it might be interesting
+    long bw = (streamSize / (observer.getElapsedTime() / TimeUnit.SECONDS.toNanos(1)));
     long expectedWindow = (latency * (bandwidth / TimeUnit.SECONDS.toMillis(1))) * 2;
-    int lastWindow = logHandler.getLastWindow();
+    int lastWindow = windows.get(windows.size() - 1);
 
     // deal with cases that either don't cause a window update or hit max window
     expectedWindow = Math.min(MAX_WINDOW, (Math.max(expectedWindow, REGULAR_WINDOW)));
 
-    // I know this range looks large, but this allows for only one extra/missed window update
+    // Range looks large, but this allows for only one extra/missed window update
     // (one extra update causes a 2x difference and one missed update causes a .5x difference)
-    if ((lastWindow < 2.1 * expectedWindow) && (expectedWindow < 2.1 * lastWindow)) {
-      System.out.println("PASS");
-      testsPassed++;
-    } else {
-      System.out.println("FAIL");
-      testsFailed++;
-    }
+    assertEquals(expectedWindow, lastWindow);
+    assertTrue((lastWindow < 2 * expectedWindow) && (expectedWindow < 2 * lastWindow));
   }
 
   /**
@@ -259,29 +223,28 @@ public class NettyFlowControlTest {
    *
    * @param serverFlowControlWindow
    * @param clientFlowControlWindow
+   * @throws InterruptedException
    */
-  private void resetConnection(int serverFlowControlWindow, int clientFlowControlWindow) {
+  private void resetConnection(int serverFlowControlWindow, int clientFlowControlWindow)
+      throws InterruptedException {
     if (channel != null) {
       if (!channel.isShutdown()) {
         channel.shutdown();
+        channel.awaitTermination(100, TimeUnit.MILLISECONDS);
       }
     }
     startServer(serverFlowControlWindow);
-
-    int channelPort = port;
-    if (useProxy) {
-      channelPort = proxyPort;
-    }
-    channel = NettyChannelBuilder.forAddress(new InetSocketAddress(loopback, channelPort))
-        .flowControlWindow(clientFlowControlWindow).negotiationType(NegotiationType.PLAINTEXT)
+    int channelPort = useProxy ? proxyPort : port;
+    channel = NettyChannelBuilder.forAddress(new InetSocketAddress(localhost, channelPort))
+        .flowControlWindow(clientFlowControlWindow)
+        .negotiationType(NegotiationType.PLAINTEXT)
         .build();
   }
 
   private void startServer(int serverFlowControlWindow) {
-    ServerBuilder<?> builder = NettyServerBuilder.forAddress(new InetSocketAddress(loopback, port))
+    ServerBuilder<?> builder = NettyServerBuilder.forAddress(new InetSocketAddress(localhost, port))
         .flowControlWindow(serverFlowControlWindow);
-    List<ServerInterceptor> allInterceptors = ImmutableList.<ServerInterceptor>builder()
-        .build();
+    List<ServerInterceptor> allInterceptors = ImmutableList.of();
     builder.addService(ServerInterceptors.intercept(
         TestServiceGrpc.bindService(new TestServiceImpl(Executors.newScheduledThreadPool(2))),
         allInterceptors));
@@ -293,38 +256,19 @@ public class NettyFlowControlTest {
   }
 
   /**
-   * Restart proxy with new bandwidth/latency settings.
+   * Start a proxy with new bandwidth/latency settings.
    *
    * @param targetBPS
    * @param targetLatency
    * @param latencyUnits
    */
-  private void resetProxy(final int targetBPS, final int targetLatency,
+  private Future<?> resetProxy(final int targetBps, final int targetLatency,
       final TimeUnit latencyUnits) {
-    executor.submit(new Runnable() {
+    return executor.submit(new Runnable() {
       @Override
       public void run() {
         try {
-          proxy.reset(targetBPS, targetLatency, latencyUnits);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
-      }
-    });
-    try {
-      // give the a few millis to start before trying to re-connect. Without this, the first request
-      // sometimes throws an HTTP/2 error for a bad message.
-      Thread.sleep(10);
-    } catch (InterruptedException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static void startProxy() {
-    executor.submit(new Runnable() {
-      @Override
-      public void run() {
-        try {
+          proxy = new TrafficControlProxy(targetBps, targetLatency, latencyUnits);
           proxy.start();
         } catch (Exception e) {
           throw new RuntimeException(e);
@@ -333,18 +277,17 @@ public class NettyFlowControlTest {
     });
   }
 
-
   /**
    * Simple stream observer to measure elapsed time of the call.
    */
   private class TestStreamObserver implements StreamObserver<StreamingOutputCallResponse> {
 
-    long lastRequest;
-    long elapsedTime;
+    long startRequestNanos;
+    long endRequestNanos;
     CountDownLatch latch = new CountDownLatch(1);
 
     public TestStreamObserver() {
-      lastRequest = System.nanoTime();
+      startRequestNanos = System.nanoTime();
     }
 
     @Override
@@ -352,22 +295,21 @@ public class NettyFlowControlTest {
 
     @Override
     public void onError(Throwable t) {
-      t.printStackTrace();
       latch.countDown();
+      throw new RuntimeException(t);
     }
 
     @Override
     public void onCompleted() {
-      long now = System.nanoTime();
-      elapsedTime = now - lastRequest;
+      long endRequestNanos = System.nanoTime();
       latch.countDown();
     }
 
     public Long getElapsedTime() {
-      return elapsedTime;
+      return endRequestNanos - startRequestNanos;
     }
 
-    public void waitFor() throws Exception {
+    public void waitFor() throws InterruptedException {
       latch.await();
     }
   }

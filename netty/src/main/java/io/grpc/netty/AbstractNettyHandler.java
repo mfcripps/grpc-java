@@ -38,6 +38,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import io.grpc.netty.AbstractNettyHandler.FlowControlPinger;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -174,16 +175,14 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
       if (elapsedTime == 0) {
         elapsedTime = 1;
       }
-      long bandwidth = 0;
-      if (elapsedTime > 0) {
-        bandwidth = (getDataSincePing() * TimeUnit.SECONDS.toNanos(1)) / elapsedTime;
-      }
+      long bandwidth = (getDataSincePing() * TimeUnit.SECONDS.toNanos(1)) / elapsedTime;
       Http2LocalFlowController fc = decoder().flowController();
       // Calculate new window size by doubling the observed BDP, but cap at max window
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
       int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      if (targetWindow > currentWindow && bandwidth > (lastBandwidth * 1.5)) {
+      // int availableWindow = fc.windowSize(connection().connectionStream());
+      if (targetWindow > currentWindow && bandwidth > lastBandwidth * 1.5) {
         lastBandwidth = bandwidth;
         int increase = targetWindow - currentWindow;
         fc.incrementWindowSize(connection().connectionStream(), increase);
@@ -192,7 +191,6 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
       }
-
     }
 
     private boolean isPinging() {
