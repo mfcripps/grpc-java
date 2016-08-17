@@ -181,8 +181,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
       int targetWindow = Math.min(getDataSincePing() * 2, MAX_WINDOW_SIZE);
       setPinging(false);
       int currentWindow = fc.initialWindowSize(connection().connectionStream());
-      // int availableWindow = fc.windowSize(connection().connectionStream());
-      if (targetWindow > currentWindow && bandwidth > lastBandwidth * 1.5) {
+      if (targetWindow > currentWindow && bandwidth > lastBandwidth) {
         lastBandwidth = bandwidth;
         int increase = targetWindow - currentWindow;
         fc.incrementWindowSize(connection().connectionStream(), increase);
@@ -191,6 +190,7 @@ abstract class AbstractNettyHandler extends Http2ConnectionHandler {
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
       }
+
     }
 
     private boolean isPinging() {

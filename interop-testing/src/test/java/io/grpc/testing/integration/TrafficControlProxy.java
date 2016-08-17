@@ -92,19 +92,18 @@ public final class TrafficControlProxy {
   /**
    * Starts a thread that waits for client and server and start reader/writer threads.
    */
-  public void start() {
+  public void start() throws IOException {
     // ClientAcceptor uses a ServerSocket server so that the client can connect to the proxy as it
     // normally would a server. serverSock then connects the server using a regular Socket as a
     // client normally would.
+    logger.info("Starting new proxy on port " + proxyPort + " with Queue Length " + queueLength);
+    clientAcceptor = new ServerSocket();
+    clientAcceptor.setReuseAddress(true);
+    clientAcceptor.bind(new InetSocketAddress(loopback, proxyPort));
     executor.submit(new Runnable() {
       @Override
       public void run() {
         try {
-          logger.info(
-              "Starting new proxy on port " + proxyPort + " with Queue Length " + queueLength);
-          clientAcceptor = new ServerSocket();
-          clientAcceptor.setReuseAddress(true);
-          clientAcceptor.bind(new InetSocketAddress(loopback, proxyPort));
           clientSock = clientAcceptor.accept();
           serverSock = new Socket();
           serverSock.connect(new InetSocketAddress(loopback, serverPort));

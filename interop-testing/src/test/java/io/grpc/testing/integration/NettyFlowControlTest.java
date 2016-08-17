@@ -173,7 +173,7 @@ public class NettyFlowControlTest {
   @Test
   public void highBandHighLatency() throws InterruptedException, ExecutionException {
     resetProxy(HIGH_BAND, HIGH_LAT, TimeUnit.MILLISECONDS).get();
-    resetConnection(BIG_WINDOW, BIG_WINDOW);
+    resetConnection(REGULAR_WINDOW, REGULAR_WINDOW);
     doTest(HIGH_BAND, HIGH_LAT);
   }
 
@@ -214,7 +214,6 @@ public class NettyFlowControlTest {
 
     // Range looks large, but this allows for only one extra/missed window update
     // (one extra update causes a 2x difference and one missed update causes a .5x difference)
-    assertEquals(expectedWindow, lastWindow);
     assertTrue((lastWindow < 2 * expectedWindow) && (expectedWindow < 2 * lastWindow));
   }
 
