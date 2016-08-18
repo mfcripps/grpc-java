@@ -221,8 +221,8 @@ public class ProxyTest {
 
     public void shutDown() {
       try {
-        rcv.close();
         server.close();
+        rcv.close();
         shutDown = true;
       } catch (IOException e) {
         shutDown = true;
@@ -255,7 +255,7 @@ public class ProxyTest {
           System.out.println("Unknown mode: use 'echo' or 'stream'");
         }
       } catch (IOException e) {
-        e.printStackTrace();
+        throw new RuntimeException(e);
       }
     }
   }
