@@ -55,7 +55,6 @@ public class ProxyTest {
 
   private int serverPort = 5001;
   private int proxyPort = 5050;
-  // private String loopBack = "127.0.0.1";
   private static ThreadPoolExecutor executor =
       new ThreadPoolExecutor(1, 4, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
 
