@@ -33,6 +33,7 @@ package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
 
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -55,6 +56,10 @@ public class ProxyTest {
 
   private int serverPort = 5001;
   private int proxyPort = 5050;
+  private static TrafficControlProxy proxy;
+  private static Socket client;
+  private static Server server;
+
   private static ThreadPoolExecutor executor =
       new ThreadPoolExecutor(1, 4, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
 
@@ -63,17 +68,24 @@ public class ProxyTest {
     executor.shutdown();
   }
 
+  @After
+  public void shutdownTest() throws IOException {
+    proxy.shutDown();
+    server.shutDown();
+    client.close();
+  }
+
   @Test
   public void smallLatency()
       throws UnknownHostException, IOException, InterruptedException, ExecutionException {
-    Server server = new Server();
+    server = new Server();
     Thread serverThread = new Thread(server);
     serverThread.start();
 
     int latency = (int) TimeUnit.MILLISECONDS.toNanos(50);
-    TrafficControlProxy p = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
-    startProxy(p).get();
-    Socket client = new Socket("localhost", proxyPort);
+    proxy = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
+    startProxy(proxy).get();
+    client = new Socket("localhost", proxyPort);
     client.setReuseAddress(true);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
@@ -91,10 +103,6 @@ public class ProxyTest {
     clientIn.read(message);
     long stop = System.nanoTime();
 
-    p.shutDown();
-    server.shutDown();
-    client.close();
-
     long rtt = (stop - start);
     assertEquals(latency, rtt, latency);
   }
@@ -102,14 +110,14 @@ public class ProxyTest {
   @Test
   public void bigLatency()
       throws UnknownHostException, IOException, InterruptedException, ExecutionException {
-    Server server = new Server();
+    server = new Server();
     Thread serverThread = new Thread(server);
     serverThread.start();
 
     int latency = (int) TimeUnit.MILLISECONDS.toNanos(250);
-    TrafficControlProxy p = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
-    startProxy(p).get();
-    Socket client = new Socket("localhost", proxyPort);
+    proxy = new TrafficControlProxy(1024 * 1024, latency, TimeUnit.NANOSECONDS);
+    startProxy(proxy).get();
+    client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
     byte[] message = new byte[1];
@@ -126,10 +134,6 @@ public class ProxyTest {
     clientIn.read(message);
     long stop = System.nanoTime();
 
-    p.shutDown();
-    server.shutDown();
-    client.close();
-
     long rtt = (stop - start);
     assertEquals(latency, rtt, latency);
   }
@@ -137,15 +141,15 @@ public class ProxyTest {
   @Test
   public void smallBandwidth()
       throws UnknownHostException, IOException, InterruptedException, ExecutionException {
-    Server server = new Server();
+    server = new Server();
     server.setMode("stream");
     (new Thread(server)).start();
     assertEquals(server.mode(), "stream");
 
     int bandwidth = 64 * 1024;
-    TrafficControlProxy p = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
-    startProxy(p).get();
-    Socket client = new Socket("localhost", proxyPort);
+    proxy = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
+    startProxy(proxy).get();
+    client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
 
@@ -154,10 +158,6 @@ public class ProxyTest {
     long start = System.nanoTime();
     clientIn.readFully(new byte[5 * bandwidth]);
     long stop = System.nanoTime();
-
-    p.shutDown();
-    server.shutDown();
-    client.close();
 
     long bandUsed = ((5 * bandwidth) / ((stop - start) / TimeUnit.SECONDS.toNanos(1)));
     assertEquals(bandwidth, bandUsed, .5 * bandwidth);
@@ -166,14 +166,14 @@ public class ProxyTest {
   @Test
   public void largeBandwidth()
       throws UnknownHostException, IOException, InterruptedException, ExecutionException {
-    Server server = new Server();
+    server = new Server();
     server.setMode("stream");
     (new Thread(server)).start();
     assertEquals(server.mode(), "stream");
     int bandwidth = 10 * 1024 * 1024;
-    TrafficControlProxy p = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
-    startProxy(p).get();
-    Socket client = new Socket("localhost", proxyPort);
+    proxy = new TrafficControlProxy(bandwidth, 200, TimeUnit.MILLISECONDS);
+    startProxy(proxy).get();
+    client = new Socket("localhost", proxyPort);
     DataOutputStream clientOut = new DataOutputStream(client.getOutputStream());
     DataInputStream clientIn = new DataInputStream(client.getInputStream());
 
@@ -182,10 +182,6 @@ public class ProxyTest {
     long start = System.nanoTime();
     clientIn.readFully(new byte[5 * bandwidth]);
     long stop = System.nanoTime();
-
-    p.shutDown();
-    server.shutDown();
-    client.close();
 
     long bandUsed = ((5 * bandwidth) / ((stop - start) / TimeUnit.SECONDS.toNanos(1)));
     assertEquals(bandwidth, bandUsed, .5 * bandwidth);
